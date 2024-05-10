@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"sync"
 
@@ -47,7 +46,6 @@ func (s *GeoIPService) GetGeoIPData(ip string) (*GeoIPData, error) {
 	// Check if the data is in the cache
 	s.mu.RLock()
 	if data, ok := s.cache.Get(ip); ok {
-		// log.Println("Cache hit ✅", ip)
 		return data.(*GeoIPData), nil
 	}
 	s.mu.RUnlock()
@@ -56,7 +54,6 @@ func (s *GeoIPService) GetGeoIPData(ip string) (*GeoIPData, error) {
 	url := fmt.Sprintf("https://get.geojs.io/v1/ip/geo/%s.json", ip)
 	resp, err := http.Get(url)
 	if err != nil {
-		log.Printf("Error getting geoip for %s, url: %s", ip, url)
 		return nil, err
 	}
 	defer resp.Body.Close()
@@ -66,7 +63,6 @@ func (s *GeoIPService) GetGeoIPData(ip string) (*GeoIPData, error) {
 	if err := json.NewDecoder(resp.Body).Decode(&geoData); err != nil {
 		return nil, err
 	}
-	// log.Printf("GeoIP: %+v\n", geoData)
 	if geoData.CountryCode == "" {
 		return nil, errors.New("received empty country code")
 	}

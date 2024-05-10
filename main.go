@@ -30,13 +30,11 @@ func LoadConfig(path string) (*Config, error) {
 func getIPFromRequest(r *http.Request) string {
 	xff := r.Header.Get("X-Forwarded-For")
 	if xff != "" {
-		// fmt.Printf("xff=%s\n", xff)
 		parts := strings.Split(xff, ",")
 		return strings.TrimSpace(parts[0])
 	}
 	xri := r.Header.Get("X-Real-IP")
 	if xri != "" {
-		// fmt.Printf("xri=%s\n", xri)
 		return strings.TrimSpace(xri)
 	}
 	ra := r.RemoteAddr
