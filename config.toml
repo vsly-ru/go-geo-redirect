@@ -1,0 +1,6 @@
+# example config
+
+[redirects]
+default = "https://example.com"
+DE = "https://de.example.com"
+IT = "https://it.example.com"
