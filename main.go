@@ -20,9 +20,19 @@ type Config struct {
 }
 
 func LoadConfig(path string) (*Config, error) {
+	log.Println("Reading config", path)
 	var config Config
 	if _, err := toml.DecodeFile(path, &config); err != nil {
 		return nil, err
+	}
+	if config.Redirects == nil {
+		return nil, errors.New("missing [redirects] section")
+	}
+	if config.Redirects["default"] == "" {
+		return nil, errors.New("missing default url")
+	}
+	for countryCode := range config.Redirects {
+		log.Printf(`%-8s -> %s`, countryCode, config.Redirects[countryCode])
 	}
 	return &config, nil
 }
@@ -109,7 +119,7 @@ func main() {
 
 	// Start the HTTP server
 	port := ":8302"
-	log.Printf("Running server. Test url: http://127.0.0.1%s/example?q=42", port)
+	log.Printf("Running server on %s", port)
 	if err := http.ListenAndServe(port, nil); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}
