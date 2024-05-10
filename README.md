@@ -14,11 +14,24 @@ DE = "https://de.example.com"
 IT = "https://it.example.com"
 ```
 
+## Example redirects
+If you are using the config above and run this app on a domain example.**org**, here is some example redirects:
+- [CountryCode] requested URL -> redirected URL
+- [US] http://example.org -> https://example.com
+- [UK] http://example.org -> https://example.com
+- [JP] http://example.org -> https://example.com
+- [AU] http://example.org -> https://example.com
+- [undetected country] http://example.org -> https://example.com
+- [US] http://example.org/index.html -> https://example.com/index.html
+- [US] http://example.org/any_path/any_request?any=1&query=2 -> https://example.com/any_path/any_request?any=1&query=2
+- [DE] http://example.org/any_path/any_request?any=1&query=2 -> https://de.example.com/any_path/any_request?any=1&query=2
+- [IT] http://example.org/any_path/any_request?any=1&query=2 -> https://it.example.com/any_path/any_request?any=1&query=2
+
 ## Building
 
-Build for current platform
+Build for your current platform
 ```bash
-go build .
+go build
 ```
 
 Build for linux amd64 (see supported GOOS and GOARCH values [here](https://gist.github.com/asukakenji/f15ba7e588ac42795f421b48b8aede63))
