@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/http/httputil"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -16,12 +17,17 @@ import (
 )
 
 type Config struct {
+	Main      map[string]string `toml:"main"`
 	Redirects map[string]string `toml:"redirects"`
 }
 
+var (
+	geoipService *geoip.GeoIPService
+	config       Config
+)
+
 func LoadConfig(path string) (*Config, error) {
 	log.Println("Reading config", path)
-	var config Config
 	if _, err := toml.DecodeFile(path, &config); err != nil {
 		return nil, err
 	}
@@ -31,6 +37,7 @@ func LoadConfig(path string) (*Config, error) {
 	if config.Redirects["default"] == "" {
 		return nil, errors.New("missing default url")
 	}
+	log.Println("Loaded redirects from the config:")
 	for countryCode := range config.Redirects {
 		log.Printf(`%-8s -> %s`, countryCode, config.Redirects[countryCode])
 	}
@@ -51,7 +58,7 @@ func getIPFromRequest(r *http.Request) string {
 	return strings.Split(ra, ":")[0]
 }
 
-func getRedirectURL(geoData *geoip.GeoIPData, config *Config, originalURL *url.URL) (string, error) {
+func getRedirectURL(geoData *geoip.GeoIPData, config *Config, originalURL *url.URL) (*url.URL, error) {
 	originalPath := originalURL.Path
 	query := originalURL.RawQuery
 	var CountryCode string = "default"
@@ -67,7 +74,7 @@ func getRedirectURL(geoData *geoip.GeoIPData, config *Config, originalURL *url.U
 	parsedURL, err := url.Parse(targetURL)
 	if err != nil {
 		msg := fmt.Sprintf("failed to parse target URL '%s': %v", targetURL, err)
-		return "", errors.New(msg)
+		return nil, errors.New(msg)
 	}
 
 	// Append the original path (from the request)
@@ -78,9 +85,8 @@ func getRedirectURL(geoData *geoip.GeoIPData, config *Config, originalURL *url.U
 		parsedURL.RawQuery = query
 	}
 
-	result := parsedURL.String()
-	log.Printf("[\033[32m%s\033[0m] %s -> %s", CountryCode, originalURL.String(), result)
-	return result, nil
+	log.Printf("[\033[32m%s\033[0m] \033[33m%s\033[0m -> %s", CountryCode, originalURL.String(), parsedURL.String())
+	return parsedURL, nil
 }
 
 func main() {
@@ -89,6 +95,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to initialize GeoIP service: %v", err)
 	}
+	geoipService = service
 
 	// Load the configuration file
 	execPath, err := os.Executable()
@@ -101,26 +108,71 @@ func main() {
 		log.Fatalf("Failed to load config file: %v", err)
 	}
 
-	// Define the HTTP server handler
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	mode := "redirect"
+	if u := config.Main["use"]; u != "" {
+		mode = u
+	}
+
+	if mode == "redirect" {
+		http.HandleFunc("/", redirectHandler)
+	}
+	if mode == "proxy" {
+		proxy := &httputil.ReverseProxy{}
+		http.HandleFunc("/", proxyHandler(proxy))
+	}
+
+	// Start the HTTP server
+	addr := ":8302"
+	if a := config.Main["addr"]; a != "" {
+		addr = a
+	}
+
+	log.Printf("Running \033[32m%s\033[0m server on %s", mode, addr)
+	if err := http.ListenAndServe(addr, nil); err != nil {
+		log.Fatalf("Failed to start server: %v", err)
+	}
+}
+
+func redirectHandler(w http.ResponseWriter, r *http.Request) {
+	ip := getIPFromRequest(r)
+	geoData, err := geoipService.GetGeoIPData(ip)
+	if err != nil {
+		log.Printf("Error getting GeoIP data for IP %s: %v", ip, err)
+	}
+
+	redirectURL, err := getRedirectURL(geoData, &config, r.URL)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	http.Redirect(w, r, redirectURL.String(), http.StatusFound)
+}
+
+func proxyHandler(proxy *httputil.ReverseProxy) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
 		ip := getIPFromRequest(r)
-		geoData, err := service.GetGeoIPData(ip)
+		geoData, err := geoipService.GetGeoIPData(ip)
 		if err != nil {
 			log.Printf("Error getting GeoIP data for IP %s: %v", ip, err)
 		}
 
-		redirectURL, err := getRedirectURL(geoData, config, r.URL)
+		proxyURL, err := getRedirectURL(geoData, &config, r.URL)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		http.Redirect(w, r, redirectURL, http.StatusFound)
-	})
 
-	// Start the HTTP server
-	port := ":8302"
-	log.Printf("Running server on %s", port)
-	if err := http.ListenAndServe(port, nil); err != nil {
-		log.Fatalf("Failed to start server: %v", err)
+		// Update the proxy target with the new URL
+		proxy.Director = func(req *http.Request) {
+			req.URL.Scheme = proxyURL.Scheme
+			req.URL.Host = proxyURL.Host
+			req.URL.Path = proxyURL.Path
+			req.URL.RawQuery = proxyURL.RawQuery
+			req.Host = req.URL.Host
+			// log.Printf("Proxying request to %s", req.URL.String())
+		}
+
+		// Serve the proxied request
+		proxy.ServeHTTP(w, r)
 	}
 }

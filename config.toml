@@ -1,5 +1,13 @@
 # example config
 
+[main]
+# address to listen on
+addr = ":8302" # default is ":8302" (equivalent to "0.0.0.0:8302")
+# which method of serving should be used
+# "redirect" - returns HTTP 302 with a new address
+# "proxy" - requests are proxied to the address
+use = "proxy" # or "redirect"
+
 [redirects]
 default = "https://example.com"
 DE = "https://de.example.com"

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 
 	lru "github.com/hashicorp/golang-lru"
@@ -40,7 +41,7 @@ func NewGeoIPService(cacheSize int) (*GeoIPService, error) {
 
 // GetGeoIPData fetches the geographical information for a given IP address
 func (s *GeoIPService) GetGeoIPData(ip string) (*GeoIPData, error) {
-	if ip == "" {
+	if ip == "" || ip == "127.0.0.1" || !strings.Contains(ip, ".") {
 		return nil, errors.New("invalid IP address")
 	}
 	// Check if the data is in the cache
